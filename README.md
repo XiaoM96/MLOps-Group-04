@@ -1,10 +1,10 @@
 # MLOps Group04 2026 Project
 
 Students: [fill student ids]:
-Julian
-Xiaopeng
-Sharan
-David 
+- Julian
+- Xiaopeng
+- Sharan
+- David 
 
 ## Aim
 
