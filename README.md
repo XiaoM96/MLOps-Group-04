@@ -1,18 +1,14 @@
 # MLOps Group04 2026 Project
 
-Students: [fill student ids]:
-- Julian
-- Xiaopeng
-- Sharan
-- David 
+Students:
+- Julian S194077
+- Xiaopeng S194408
+- Sharan S242656
+- David S250806
 
 ## Aim
 
-This project aims to classify EKG signals into four different categories, including Normal, AFib, Other, and Noisy. Users should be able to upload EKG data and receive a classification result indicating the type of signal.
-
-## Data
-
-The EKG data is taken from xx, provide by DTU health. Time series data is converted into spectrogram images.
+This project aims to classify EKG signals into four different categories, including Normal, AFib, Other, and Noisy. Users should be able to upload EKG data and receive a classification result indicating the type of signal. This project will utilize the CACHET-CADB (Copenhagen Center for Health Technology - Contextualized Arrhythmia Database) provided by DTU Health. We are using a subset of the dataset that contains only the ECG recordings. It contains 1602 ten-second long ECG samples of AF, NSR, noise, and other rhythm classes, which are manually annotated by two cardiologists. The ECG is sampled at 1024 Hz and a 12-bit resolution. 
 
 ## Model
 
