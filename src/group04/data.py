@@ -2,12 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
+import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Dataset
+import typer
+from torch import nn
+from torch.utils.data import DataLoader, Dataset, random_split
 
 
 @dataclass(frozen=True)
@@ -26,27 +29,57 @@ class EkgDataset(Dataset):
         ...
     """
 
-    def __init__(self, data_path: Path, target_hw: Tuple[int, int] = (224, 224)) -> None:
+    def __init__(
+        self,
+        data_path: Path,
+        target_hw: Tuple[int, int] = (224, 224),
+        num_samples: int | None = None,
+        use_min_class_size: bool = False,
+        random_seed: int = 42,
+        ignore_classes: List[str] | None = None,
+    ) -> None:
         self.data_path = Path(data_path)
         self.target_hw = target_hw
+        self.random_seed = random_seed
+        self.rng = np.random.RandomState(random_seed)
+        self.ignore_classes = ignore_classes or []
 
         # Raise error if no data found
         if not self.data_path.exists():
             raise FileNotFoundError(f"{self.data_path} does not exist")
 
         # Find class subfolders and names
-        self.classes = sorted([p.name for p in self.data_path.iterdir() if p.is_dir()])
+        all_classes = sorted([p.name for p in self.data_path.iterdir() if p.is_dir()])
+        self.classes = [cls for cls in all_classes if cls not in self.ignore_classes]
+        
         if not self.classes:
             raise ValueError(f"No class subfolders found in {self.data_path}")
 
         # Map class names to integer labels
         class_to_idx = {name: i for i, name in enumerate(self.classes)}
 
+        # Get all files per class
+        files_per_class: dict[str, list[Path]] = {}
+        for cls in self.classes:
+            files = sorted((self.data_path / cls).glob("*.npy"))
+            files_per_class[cls] = files
+
+        # Determine target sample count
+        if use_min_class_size:
+            num_samples = min(len(files) for files in files_per_class.values())
+        elif num_samples is None:
+            num_samples = max(len(files) for files in files_per_class.values())
+
+        # Build samples with random selection
         samples: List[Sample] = []
         for cls in self.classes:
-            for f in sorted((self.data_path / cls).glob("*.npy")):
-                samples.append(Sample(path=f, label=class_to_idx[cls]))
-
+            files = files_per_class[cls]
+            # Randomly select num_samples files from this class
+            selected_files = self.rng.choice(
+                files, size=min(num_samples, len(files)), replace=False
+            )
+            for f in selected_files:
+                samples.append(Sample(path=Path(f), label=class_to_idx[cls]))
 
         if not samples:
             raise ValueError(f"No .npy files found under {self.data_path}")
@@ -128,18 +161,97 @@ class EkgDataset(Dataset):
 
         return t
     
-def preprocess(data_path: Path, output_folder: Path) -> None:
+class EkgDataModule(pl.LightningDataModule):
+    def __init__(
+        self,
+        data_dir: str = './data/processed/',
+        batch_size: int = 32,
+        num_workers: int = 4,
+        val_split: float = 0.2,
+        test_split: float = 0.2,
+        use_weighted_sampler: bool = False,
+    ):
+        super().__init__()
+        self.data_dir = data_dir
+        self.batch_size = batch_size
+        self.num_workers = num_workers
+        self.val_split = val_split
+        self.test_split = test_split
+        self.use_weighted_sampler = use_weighted_sampler
+        self.dataset = None
+        self.train_ds = None
+        self.val_ds = None
+        self.test_ds = None
+
+    def setup(self, stage: Optional[str] = None):
+        if self.dataset is None:
+            self.dataset = EkgDataset(Path(self.data_dir))
+            total_size = len(self.dataset)
+            train_size = int((1 - self.val_split - self.test_split) * total_size)
+            val_size = int(self.val_split * total_size)
+            test_size = total_size - train_size - val_size
+
+            self.train_ds, self.val_ds, self.test_ds = random_split(
+                self.dataset,
+                [train_size, val_size, test_size],
+                generator=torch.Generator().manual_seed(42),
+            )
+
+    def train_dataloader(self):
+        return DataLoader(
+            self.train_ds,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+
+    def val_dataloader(self):
+        return DataLoader(
+            self.val_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        )
+
+    def test_dataloader(self):
+        return DataLoader(
+            self.test_ds,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            pin_memory=True,
+        ) 
+    
+def preprocess(
+    data_path: str,
+    output_folder: str,
+    num_samples: int | None = None,
+    use_min_class_size: bool = False,
+    random_seed: int = 42,
+    ignore_classes: List[str] | None = None,
+) -> None:
+    """Preprocess raw .npy files to standardized tensors.
+
+    Args:
+        data_path: Path to raw data directory with class subfolders.
+        output_folder: Path to save processed tensors.
+        num_samples: Target number of samples per class. If None, uses max class size.
+        use_min_class_size: If True, uses the size of the smallest class.
+        random_seed: Seed for reproducible random selection.
+        ignore_classes: List of class folder names to exclude from processing.
+    """
     print("Preprocessing data...")
-    dataset = EkgDataset(data_path)
-    dataset.preprocess(output_folder)
+    dataset = EkgDataset(
+        Path(data_path),
+        num_samples=num_samples,
+        use_min_class_size=use_min_class_size,
+        random_seed=random_seed,
+        ignore_classes=ignore_classes,
+    )
+    dataset.preprocess(Path(output_folder))
 
 
 if __name__ == "__main__":
-    import sys
-    if len(sys.argv) == 3:
-        data_path = Path(sys.argv[1])
-        output_folder = Path(sys.argv[2])
-    else:
-        data_path = Path("./data/raw/time_series")
-        output_folder = Path("./data/processed")
-    preprocess(data_path, output_folder)
+    typer.run(preprocess)
