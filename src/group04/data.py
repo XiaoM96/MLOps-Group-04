@@ -24,8 +24,8 @@ class EkgDataset(Dataset):
 
     Expected layout:
       data_path/
-        class_a/*.npy
-        class_b/*.npy
+        class_a/*.pt
+        class_b/*.pt
         ...
     """
 
@@ -61,7 +61,7 @@ class EkgDataset(Dataset):
         # Get all files per class
         files_per_class: dict[str, list[Path]] = {}
         for cls in self.classes:
-            files = sorted((self.data_path / cls).glob("*.npy"))
+            files = sorted((self.data_path / cls).glob("*.pt"))
             files_per_class[cls] = files
 
         # Determine target sample count
@@ -91,8 +91,7 @@ class EkgDataset(Dataset):
 
     def __getitem__(self, index: int):
         s = self.samples[index]
-        item_np_array = np.load(s.path)  # expects numeric array
-        item_torch = self._to_chw_float32(item_np_array, self.target_hw)
+        item_torch = torch.load(s.path)  # already a torch tensor (C, H, W, float32)
         label = s.label
         return item_torch, label
 
@@ -161,6 +160,7 @@ class EkgDataset(Dataset):
 
         return t
     
+
 class EkgDataModule(pl.LightningDataModule):
     def __init__(
         self,
