@@ -1,6 +1,31 @@
-# group04
+# MLOps Group04 2026 Project
 
-MLOps group 04 project
+Students: [fill student ids]:
+Julian
+Xiaopeng
+Sharan
+David 
+
+## Aim
+
+This project aims to classify EKG signals into four different categories, including Normal, AFib, Other, and Noisy. Users should be able to upload EKG data and receive a classification result indicating the type of signal.
+
+## Data
+
+The EKG data is taken from xx, provide by DTU health. Time series data is converted into spectrogram images.
+
+## Model
+
+The chosen architecture is EfficientNetBXX, known for its efficiency and performance in image classification tasks. A pretrained model was downloaded from XXX and fine-tuned. 
+
+## Frameworks and Libraries
+
+The project utilizes the following frameworks and libraries:
+- Hydra for configuration management
+- PyTorch Lightning for model training and evaluation
+- Docker for containerization
+- UV for python package management
+
 
 ## Project structure
 
